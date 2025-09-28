@@ -1,48 +1,31 @@
 // js/formValidation.js
 // ============================================================
-// MÓDULO DE VALIDACIÓN DEL FORMULARIO
-// - Orquesta la validación de cada campo usando:
-//   1) Constraint Validation API (HTML5) → checkValidity()/validity
-//   2) Reglas personalizadas (rules.js)
-//   3) Mensajes configurables (messages.js)
-// - Pinta/borra errores con utilidades DOM (dom.js)
-// - Enchufa eventos (blur, input, change, submit, reset)
+// Valida campos (nativo + custom), pinta/limpia errores,
+// y SOLO habilita "Enviar solicitud" si TODO el formulario es válido.
 // ============================================================
 
-import { rules } from "./validation/rules.js";          // Reglas custom (e.g., objetivos ≥ 3 palabras)
-import { messages } from "./validation/messages.js";    // Textos por campo (email, altura, peso, etc.)
-import { showError, clearError } from "./utils/dom.js"; // Pinta/borra mensaje y estados visuales/ARIA
+import { rules } from "./validation/rules.js";
+import { messages } from "./validation/messages.js";
+import { showError, clearError } from "./utils/dom.js";
 
-// Referencia al formulario principal (id declarado en el HTML)
-const form = document.getElementById("form-inscripcion");
+const FORM_ID = "form-inscripcion";
 
-/**
- * Devuelve el mensaje adecuado según la Constraint Validation API.
- * Prioriza mensajes “humanos” para altura y peso (los tuyos en messages.js)
- *
- * @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} input - Control a validar
- * @param {string} name - Nombre lógico del campo (coincide con name="" en el HTML)
- * @returns {string} Mensaje de error a mostrar (o "" si todo OK)
- */
+/* ------------------------ Mensajes nativos ------------------------ */
 function getNativeMessage(input, name) {
-  const v = input.validity; // Objeto con flags: valueMissing, patternMismatch, rangeUnderflow, etc.
+  const v = input.validity;
 
-  // 1) Reglas genéricas de la API nativa
-  if (v.valueMissing) return "Este campo es obligatorio.";   // required
-  if (v.typeMismatch) {                                      // type="email" o "url"
+  if (v.valueMissing) return "Este campo es obligatorio.";
+  if (v.typeMismatch) {
     if (input.type === "email") return "Correo no válido.";
     if (input.type === "url")   return "URL no válida.";
     return "Valor no válido.";
   }
-  if (v.patternMismatch) return input.title || "Formato inválido."; // Usa title como guía si lo diste
+  if (v.patternMismatch) return input.title || "Formato inválido.";
 
-  // 2) Rangos/step → si es altura o peso, usamos tus mensajes personalizados
   if (v.rangeUnderflow || v.rangeOverflow || v.stepMismatch) {
     if (name === "altura" || name === "peso") {
-      // Si definiste messages.altura / messages.peso, se muestran aquí
       return messages?.[name] || "Valor fuera de rango.";
     }
-    // Mensajes genéricos para el resto de campos con min/max/step
     if (v.rangeUnderflow) return `El valor debe ser ≥ ${input.min}.`;
     if (v.rangeOverflow)  return `El valor debe ser ≤ ${input.max}.`;
     if (v.stepMismatch)   return input.step && input.step !== "any"
@@ -50,113 +33,208 @@ function getNativeMessage(input, name) {
       : "Valor no válido.";
   }
 
-  // 3) Longitud de texto (minLength/maxLength)
   if (v.tooShort) return `Debe tener al menos ${input.minLength} caracteres.`;
   if (v.tooLong)  return `Debe tener como máximo ${input.maxLength} caracteres.`;
 
-  return ""; // Sin errores nativos
+  return "";
 }
 
-/**
- * Valida un control individual del formulario.
- * Secuencia:
- *  1) Limpia customValidity y consulta checkValidity() → errores nativos (required, min/max, pattern…)
- *  2) Aplica regla personalizada (si existe en rules.js)
- *  3) Según el resultado, pinta o borra error con showError/clearError
- *
- * @param {HTMLElement} input - input/select/textarea
- * @returns {boolean} true si es válido, false si inválido
- */
-function validateField(input) {
-  const name = input.name;        // clave: debe coincidir con messages[name] y rules[name]
+/* ------------------------ Validación por campo ------------------------
+   paint=true  -> pinta/borra mensajes
+   paint=false -> solo calcula y devuelve true/false (no toca la UI)
+------------------------------------------------------------------------ */
+function validateField(input, { paint = true } = {}) {
+  const name = input.name;
   const val  = input.value;
 
-  // --- 1) Validación nativa
-  input.setCustomValidity("");    // Asegura que no quede un estado previo forzado
-  if (!input.checkValidity()) {   // La API nativa te dice si cumple required/pattern/min/max/step…
-    const msg = getNativeMessage(input, name) || "Valor inválido.";
-    showError(input, msg);        // Pinta mensaje + ARIA + clases de error (dom.js)
+  input.setCustomValidity("");
+  if (!input.checkValidity()) {
+    if (paint) {
+      const msg = getNativeMessage(input, name) || "Valor inválido.";
+      showError(input, msg);
+    }
     return false;
   }
 
-  // --- 2) Regla personalizada (si la hay)
   const rule = rules[name];
   if (rule && !rule(val)) {
-    // Si define una regla custom y no pasa, mostramos tu mensaje de catálogo
-    showError(input, messages[name] || "Valor inválido.");
+    if (paint) {
+      showError(input, messages[name] || "Valor inválido.");
+    }
     return false;
   }
 
-  // --- 3) OK → limpiamos cualquier rastro de error anterior
-  clearError(input);
+  if (paint) clearError(input);
   return true;
 }
 
-/**
- * Conecta los event listeners del formulario:
- * - blur: valida al salir del control
- * - input/change: revalida en caliente (evita que un mensaje se “pegue”)
- * - submit: valida todo; si falla, evita envío y enfoca el primer error
- */
-function wireValidation() {
+/* ------------------------ Condiciones médicas ------------------------ */
+function wireCondicionesMedicas(form) {
+  const group = form.querySelector('[role="group"][aria-label="Condiciones médicas"]');
+  if (!group) return () => true;
+
+  const all = Array.from(group.querySelectorAll('input[type="checkbox"][name="condiciones[]"]'));
+  const none = all.find(i => i.value?.toLowerCase() === "ninguna");
+  const others = all.filter(i => i !== none);
+
+  function toggleFromNone() {
+    if (!none) return;
+    if (none.checked) {
+      others.forEach(i => {
+        i.checked = false;
+        i.disabled = true;
+        i.closest("label")?.classList.add("is-disabled");
+      });
+    } else {
+      others.forEach(i => {
+        i.disabled = false;
+        i.closest("label")?.classList.remove("is-disabled");
+      });
+    }
+  }
+
+  function toggleFromOthers() {
+    if (!none) return;
+    const anyOther = others.some(i => i.checked);
+    none.checked = false;
+    none.disabled = anyOther;
+    none.closest("label")?.classList.toggle("is-disabled", anyOther);
+  }
+
+  none?.addEventListener("change", toggleFromNone);
+  others.forEach(i => i.addEventListener("change", toggleFromOthers));
+  toggleFromNone(); toggleFromOthers();
+
+  // Valida que haya algo marcado; si silent, no pinta mensaje
+  function validateCondiciones({ silent = false } = {}) {
+    const ok = all.some(i => i.checked);
+    if (silent) return ok;
+
+    const control = group.closest(".control") || group.parentElement;
+    let hint = control.querySelector(".error-msg-condiciones");
+    if (!ok) {
+      if (!hint) {
+        hint = document.createElement("p");
+        hint.className = "error-msg error-msg-condiciones";
+        hint.setAttribute("role", "alert");
+        control.appendChild(hint);
+      }
+      hint.textContent = "Selecciona al menos una opción (o marca 'Ninguna').";
+    } else {
+      hint?.remove();
+    }
+    return ok;
+  }
+
+  return validateCondiciones;
+}
+
+/* ------------------------ ¿Es válido TODO el formulario? ------------------------
+   - Ejecuta validaciones nativas + custom en SILENCIO.
+   - Incluye el grupo de condiciones médicas (silent).
+------------------------------------------------------------------------------- */
+function isFormValid(form, validateCondicionesSilent) {
+  const inputs = form.querySelectorAll("input, select, textarea");
+  for (const el of inputs) {
+    if (!validateField(el, { paint: false })) return false;
+  }
+  if (validateCondicionesSilent && !validateCondicionesSilent({ silent: true })) {
+    return false;
+  }
+  return true;
+}
+
+/* ------------------------ Gate del botón de Enviar ------------------------
+   Habilita el submit SOLO si:
+   - todo el form es válido (isFormValid)
+   - (opcional) T&C (y RGPD) están marcados
+---------------------------------------------------------------------------- */
+function wireSubmitGate(form, validateCondiciones) {
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const tos  = form.querySelector('input[name="tos"]');
+  const rgpd = form.querySelector('input[name="rgpd"]'); // opcional
+
+  function update() {
+    // 1) Validez global (silenciosa)
+    const allValid = isFormValid(form, validateCondiciones);
+
+    // 2) Requisitos de consentimientos
+    let consentsOK = true;
+    if (tos)  consentsOK = consentsOK && tos.checked;   // exige T&C
+    // Si también quieres exigir RGPD, descomenta:
+    // if (rgpd) consentsOK = consentsOK && rgpd.checked;
+
+    const allow = allValid && consentsOK;
+
+    if (submitBtn) {
+      submitBtn.disabled = !allow;
+      submitBtn.setAttribute("aria-disabled", String(!allow));
+    }
+  }
+
+  // Escuchas globales para recalcular el gate en tiempo real
+  form.addEventListener("input",  update, true);
+  form.addEventListener("change", update, true);
+  tos?.addEventListener("change", update);
+  rgpd?.addEventListener("change", update);
+
+  // Estado inicial + tras reset
+  update();
+  form.addEventListener("reset", () => setTimeout(update, 0));
+}
+
+/* ------------------------ Wiring de validación visible ------------------------ */
+function wireValidationUI(form, validateCondiciones) {
   const inputs = form.querySelectorAll("input, select, textarea");
 
-  // Validación “en tiempo real” y al salir de cada campo
+  // Validación visible (pinta) en blur / input / change
   inputs.forEach((el) => {
-    el.addEventListener("blur",   () => validateField(el)); // al salir
-    el.addEventListener("input",  () => validateField(el)); // mientras escribe
-    el.addEventListener("change", () => validateField(el)); // selects/checkbox/radio
+    el.addEventListener("blur",   () => validateField(el, { paint: true }));
+    el.addEventListener("input",  () => validateField(el, { paint: true }));
+    el.addEventListener("change", () => validateField(el, { paint: true }));
   });
 
-  // Validación global al enviar
   form.addEventListener("submit", (e) => {
     const invalids = [];
-    inputs.forEach((el) => { if (!validateField(el)) invalids.push(el); });
+    inputs.forEach((el) => { if (!validateField(el, { paint: true })) invalids.push(el); });
 
-    if (invalids.length) {
-      e.preventDefault();         // no se envía si hay errores
-      invalids[0].focus();        // accesibilidad: enfoca el primer error
+    const okCond = validateCondiciones ? validateCondiciones({}) : true;
+
+    if (invalids.length || !okCond) {
+      e.preventDefault();
+      (invalids[0] || form.querySelector(".error-msg-condiciones"))?.focus?.();
     }
   });
 }
 
-// Enchufamos toda la validación cuando el DOM esté listo
-document.addEventListener("DOMContentLoaded", wireValidation);
+/* ------------------------ Reset elegante ------------------------ */
+function wireResetCleanup(form) {
+  function limpiarEstados() {
+    form.querySelectorAll(".error-msg").forEach(n => n.remove());
+    form.querySelectorAll("[aria-invalid='true']").forEach(el => el.removeAttribute("aria-invalid"));
+    form.querySelectorAll(".is-valid, .is-invalid").forEach(el => el.classList.remove("is-valid","is-invalid"));
+    form.querySelectorAll("select[multiple]").forEach(sel => { for (const opt of sel.options) opt.selected = false; });
+  }
+  form.addEventListener("reset", () => {
+    limpiarEstados();
+    const first = form.querySelector("input, select, textarea");
+    first?.focus();
+  });
+}
 
-/**
- * Reset “elegante”: además del reset nativo (restaura valores),
- * limpiamos todo rastro de la validación JS (mensajes, ARIA, clases…)
- * y llevamos el foco al primer control para una nueva entrada.
- *
- * Nota: si quieres que los <select multiple> queden completamente vacíos,
- * el bloque de abajo los desmarca explícitamente.
- */
-(() => {
-  const form = document.getElementById("form-inscripcion");
+/* ------------------------ Arranque ------------------------ */
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById(FORM_ID);
   if (!form) return;
 
-  function limpiarEstados() {
-    // Elimina todos los mensajes de error creados por JS
-    form.querySelectorAll(".error-msg").forEach(n => n.remove());
+  const validateCondiciones = wireCondicionesMedicas(form);
 
-    // Quita estado ARIA de error
-    form.querySelectorAll("[aria-invalid='true']")
-        .forEach(el => el.removeAttribute("aria-invalid"));
+  // 1) Gate del botón por validez global (silenciosa) + consentimientos
+  wireSubmitGate(form, validateCondiciones);
 
-    // Quita clases auxiliares si las usas (bootstrap-like)
-    form.querySelectorAll(".is-valid, .is-invalid")
-        .forEach(el => el.classList.remove("is-valid","is-invalid"));
+  // 2) Validación visible (mensajes) y submit
+  wireValidationUI(form, validateCondiciones);
 
-    // Asegura limpieza total en selects múltiples (opcional)
-    form.querySelectorAll("select[multiple]").forEach(sel => {
-      for (const opt of sel.options) opt.selected = false;
-    });
-  }
-
-  // Cuando el usuario pulsa el botón “Limpiar” (type="reset")
-  form.addEventListener("reset", () => {
-    limpiarEstados(); // complementa el reset nativo
-    const first = form.querySelector("input, select, textarea");
-    if (first) first.focus(); // UX: listo para volver a empezar
-  });
-})();
+  // 3) Limpieza de estados tras reset
+  wireResetCleanup(form);
+});
