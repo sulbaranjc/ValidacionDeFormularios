@@ -133,8 +133,13 @@
 
           <div class="grid cols-2">
             <div class="control">
-              <label for="objetivos">Objetivos principales</label>
-              <textarea id="objetivos" name="objetivos" placeholder="Pérdida de peso, ganar masa muscular, rehabilitación..." maxlength="500"></textarea>
+            <label for="objetivos">Objetivos principales <span class="req" aria-hidden="true">*</span></label>
+            <textarea id="objetivos"
+                      name="objetivos"
+                      placeholder="Pérdida de peso, ganar masa muscular, rehabilitación..."
+                      maxlength="500"
+                      required></textarea>
+
               <div class="hint">Máximo 500 caracteres.</div>
             </div>
             <div class="control">
