@@ -162,3 +162,39 @@ form.addEventListener("submit", (e) => {
     group.querySelector('input[type="checkbox"]')?.focus();
   }
 });
+
+// --- Habilitar submit solo si se aceptan T&C (y opcionalmente RGPD) ---
+(() => {
+  const form = document.getElementById("form-inscripcion");
+  if (!form) return;
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const tos = form.querySelector('input[name="tos"]');
+  const rgpd = form.querySelector('input[name="rgpd"]'); // opcional
+
+  function updateSubmitState() {
+    // Requisito mínimo: T&C marcado
+    let allow = !!(tos && tos.checked);
+
+    // Si quieres exigir también RGPD, descomenta la línea:
+    // allow = allow && !!(rgpd && rgpd.checked);
+
+    if (submitBtn) {
+      submitBtn.disabled = !allow;
+      submitBtn.setAttribute("aria-disabled", String(!allow));
+    }
+  }
+
+  // Estado inicial
+  updateSubmitState();
+
+  // Escuchas
+  tos?.addEventListener("change", updateSubmitState);
+  rgpd?.addEventListener("change", updateSubmitState);
+
+  // Tras limpiar el formulario, vuelve a desactivar el submit
+  form.addEventListener("reset", () => {
+    // dejar que el reset nativo ocurra y luego sincronizar
+    setTimeout(updateSubmitState, 0);
+  });
+})();

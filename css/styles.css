@@ -260,3 +260,9 @@ textarea[aria-invalid="true"]{
 /* Chip deshabilitado ya lo tienes */
 .chip.is-disabled { opacity: .55; }
 
+button[disabled] {
+  opacity: .6;
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+}
+
