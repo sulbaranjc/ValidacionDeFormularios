@@ -43,3 +43,122 @@ function wireValidation() {
 }
 
 document.addEventListener("DOMContentLoaded", wireValidation);
+
+// --- Reset elegante del formulario (sin recargar) ---
+(() => {
+  const form = document.getElementById("form-inscripcion");
+  if (!form) return;
+
+  // Quita errores, atributos ARIA y clases auxiliares añadidas por tu JS
+  function limpiarEstados() {
+    // 1) mensajes de error creados por JS
+    form.querySelectorAll(".error-msg").forEach(n => n.remove());
+
+    // 2) estados de accesibilidad/validación custom
+    form.querySelectorAll("[aria-invalid='true']").forEach(el => el.removeAttribute("aria-invalid"));
+    form.querySelectorAll(".is-valid, .is-invalid").forEach(el => {
+      el.classList.remove("is-valid", "is-invalid");
+    });
+
+    // 3) si quieres que los <select multiple> queden sin selección (didáctico):
+    form.querySelectorAll("select[multiple]").forEach(sel => {
+      for (const opt of sel.options) opt.selected = false;
+    });
+  }
+
+  // Enganche al evento 'reset' del FORM (se dispara cuando haces click en el botón type="reset")
+  form.addEventListener("reset", () => {
+    // Deja que el navegador restaure valores…
+    // …y tú limpias estados “extra” creados por JS.
+    limpiarEstados();
+
+    // Opcional: foco al primer control
+    const first = form.querySelector("input, select, textarea");
+    if (first) first.focus();
+  });
+
+  // Si en algún punto haces un reset manual:
+  // form.reset(); limpiarEstados();
+})();
+// --- Exclusividad de "Ninguna" en condiciones médicas ---
+(() => {
+  const form = document.getElementById("form-inscripcion");
+  if (!form) return;
+
+  // Contenedor del grupo (el div .chips con role="group" y aria-label="Condiciones médicas")
+  const group = form.querySelector('[role="group"][aria-label="Condiciones médicas"]');
+  if (!group) return;
+
+  const all = Array.from(group.querySelectorAll('input[type="checkbox"][name="condiciones[]"]'));
+  const none = all.find(i => i.value?.toLowerCase() === "ninguna");
+  const others = all.filter(i => i !== none);
+
+  function updateStateFromNone() {
+    if (!none) return;
+    if (none.checked) {
+      // Desmarcar y deshabilitar todas las demás
+      others.forEach(i => {
+        i.checked = false;
+        i.disabled = true;
+        i.closest("label")?.classList.add("is-disabled");
+      });
+    } else {
+      // Habilitar todas las demás
+      others.forEach(i => {
+        i.disabled = false;
+        i.closest("label")?.classList.remove("is-disabled");
+      });
+    }
+  }
+
+  function updateStateFromOthers() {
+    if (!none) return;
+    const anyOtherChecked = others.some(i => i.checked);
+    // Si hay alguna otra marcada, "Ninguna" queda desmarcada y deshabilitada
+    none.checked = false;
+    none.disabled = anyOtherChecked;
+    none.closest("label")?.classList.toggle("is-disabled", anyOtherChecked);
+  }
+
+  // Listeners
+  if (none) none.addEventListener("change", updateStateFromNone);
+  others.forEach(i => i.addEventListener("change", updateStateFromOthers));
+
+  // Estado inicial coherente por si viene con valores pre-marcados
+  updateStateFromNone();
+  updateStateFromOthers();
+})();
+// Dentro de tu lógica de validación al hacer submit:
+function validateCondicionesMedicas(form) {
+  const group = form.querySelector('[role="group"][aria-label="Condiciones médicas"]');
+  if (!group) return true;
+  const checks = group.querySelectorAll('input[type="checkbox"][name="condiciones[]"]');
+  const ok = Array.from(checks).some(i => i.checked);
+
+  // Muestra/oculta mensaje de error bajo el grupo
+  const control = group.closest(".control") || group.parentElement;
+  let hint = control.querySelector(".error-msg-condiciones");
+  if (!ok) {
+    if (!hint) {
+      hint = document.createElement("p");
+      hint.className = "error-msg error-msg-condiciones";
+      hint.setAttribute("role", "alert");
+      control.appendChild(hint);
+    }
+    hint.textContent = "Selecciona al menos una opción (o marca 'Ninguna').";
+  } else if (hint) {
+    hint.remove();
+  }
+  return ok;
+}
+
+// En tu manejador de submit:
+form.addEventListener("submit", (e) => {
+  const okCond = validateCondicionesMedicas(form);
+  // …combina con el resto de tus validaciones
+  if (!okCond /* || otrasValidaciones === false */) {
+    e.preventDefault();
+    // Enfoca el grupo si falla
+    group.querySelector('input[type="checkbox"]')?.focus();
+  }
+});
