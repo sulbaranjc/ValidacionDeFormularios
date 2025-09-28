@@ -31,7 +31,16 @@ export const rules = {
     const age = new Date().getFullYear() - y;
     return age >= 16 && age < 120;
   },
+  altura: v => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 120 && n <= 230;
+  },
+  peso: v => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 35 && n <= 250;
+  },
 
   // NUEVO: “Objetivos principales” — requiere al menos 3 palabras
   objetivos: v => contarPalabras(v) >= OBJETIVOS_MIN_WORDS,
 };
+
