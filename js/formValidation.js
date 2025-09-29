@@ -100,8 +100,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // (Opcional) Evitar envío si el nombre está mal:
-    // const form = document.getElementById('form-inscripcion');
-    // form?.addEventListener('submit', (e) => { if (!validateName()) e.preventDefault(); });
+    const form = document.getElementById('form-inscripcion'); // <form id="form-inscripcion" ...>
+    form?.addEventListener('submit', (e) => { if (!validateName()) e.preventDefault(); }); // 'submit' del form
   }
 
   wireNameValidation();
