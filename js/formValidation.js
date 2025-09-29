@@ -101,10 +101,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // (Opcional) Evitar envío si el nombre está mal:
     const form = document.getElementById('form-inscripcion'); // <form id="form-inscripcion" ...>
-    form?.addEventListener('submit', (e) => { if (!validateName()) e.preventDefault(); }); // 'submit' del form
+    form?.addEventListener('submit', (e) => { if (!validateName()) e.preventDefault(); }); // ' ' del form
   }
 
-  wireNameValidation();
+  wireNameValidation(); // linea única para activar la validación del nombre
 
   // ==========================================================
   // EJEMPLO (OPCIONAL) CAMPO 2: APELLIDOS (mínimo 3 chars)
