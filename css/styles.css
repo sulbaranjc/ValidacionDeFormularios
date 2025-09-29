@@ -198,3 +198,28 @@ footer {
       .plan-card h4{ margin:.2rem 0 .6rem; font-size:1rem }
       .price{ font-weight:800 }
 
+/* empiezan los estilos de validación de formularios */
+/* --- Estados básicos controlados por JS para el campo Nombre --- */
+input[aria-invalid="true"] {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 4px rgba(239, 91, 91, .18);
+  background: #0c111c;
+}
+
+input[data-valid="true"] {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 4px rgba(91, 141, 239, .18);
+  background: #0c111c;
+}
+
+/* Mensaje de error sencillo */
+.error-msg {
+  margin-top: 6px;
+  padding: 8px 10px;
+  font-size: .9rem;
+  color: #ffd3d3;
+  background: rgba(239,91,91,.12);
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+}
+
