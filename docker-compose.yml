@@ -1,0 +1,13 @@
+services:
+  validacion:
+    build: .
+    container_name: validacion-formularios
+    environment:
+      - VIRTUAL_HOST=validacion.docker.sulbaranjc.com
+      - VIRTUAL_PORT=80
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
