@@ -1,5 +1,1167 @@
 # Recolector de fuentes
 
+- Fecha de generación: 2026-01-14 07:42:03
+- Raíz: `/mnt/DocumentosJC/proyectos/ValidacionDeFormularios`
+- Archivo de salida: `repositorio.txt` (chunk 1/1)
+
+## Árbol de archivos incluidos
+
+```text
+
+```
+
+## Índice global (archivo → chunk)
+
+- [001] .gitignore
+- [001] assets/data/ciudades.json
+- [001] assets/data/sample.json
+- [001] components/footer.html
+- [001] components/header.html
+- [001] css/styles.css
+- [001] docker-compose.yml
+- [001] Dockerfile
+- [001] docs/guia.md
+- [001] docs/validacion_formularios_basico.drawio
+- [001] docs/validacion_formularios_detallado.drawio
+- [001] index.html
+- [001] js/formValidation.js
+- [001] js/main.js
+- [001] pages/about.html
+- [001] README.md
+- [001] repositorio.txt
+
+## Archivos omitidos (razones)
+
+_No se omitieron archivos._
+
+---
+
+docker-compose.yml
+-----
+```yaml
+services:
+  validacion:
+    build: .
+    container_name: validacion-formularios
+    environment:
+      - VIRTUAL_HOST=validacion.docker.sulbaranjc.com
+      - VIRTUAL_PORT=80
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+
+```
+
+README.md
+-----
+```markdown
+
+```
+
+Dockerfile
+-----
+```dockerfile
+# Imagen ligera de nginx
+FROM nginx:alpine
+
+# Limpiamos config por defecto
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copiamos TODO el proyecto
+COPY . /usr/share/nginx/html
+
+# Puerto interno
+EXPOSE 80
+
+```
+
+js/formValidation.js
+-----
+```javascript
+// js/forValidation.js
+// ----------------------------------------------------------------------------
+// VERSIÓN “MINI” PARA CLASE: una función por campo
+// - Campo 1: Nombre  -> validateName() + wireNameValidation()
+// - (Ejemplo) Campo 2: Apellidos -> validateLastName() + wireLastNameValidation()
+// Helpers reutilizables: showError() / clearError() para no repetir DOM.
+// ----------------------------------------------------------------------------
+
+document.addEventListener('DOMContentLoaded', () => {
+  // ==========================
+  // HELPERS DE UI (GENÉRICOS)
+  // ==========================
+
+  /**
+   * Pinta el campo como inválido (rojo) y crea/actualiza el <p> del error.
+   * @param {HTMLInputElement|HTMLTextAreaElement} input
+   * @param {string} errorId  id único del <p> que mostrará el mensaje
+   * @param {string} message  texto del error
+   */
+  function showError(input, errorId, message) {
+    // Señales para accesibilidad y CSS
+    input.setAttribute('aria-invalid', 'true'); // borde rojo
+    input.removeAttribute('data-valid'); // si estaba marcado como válido, lo quitamos
+
+    // Contenedor visual donde insertaremos el mensaje
+    const control = input.closest('.control') || input.parentElement; 
+
+    // Crear o actualizar el <p class="error-msg" role="alert">
+    let p = control.querySelector('#' + errorId);
+    if (!p) {
+      p = document.createElement('p');
+      p.id = errorId;
+      p.className = 'error-msg';
+      p.setAttribute('role', 'alert');
+      control.appendChild(p);
+
+      // Vincular input ↔ mensaje (accesibilidad)
+      const describedby = (input.getAttribute('aria-describedby') || '')
+        .split(' ')
+        .filter(Boolean);
+      if (!describedby.includes(errorId)) {
+        describedby.push(errorId);
+        input.setAttribute('aria-describedby', describedby.join(' '));
+      }
+    }
+    p.textContent = message;
+  }
+
+  /**
+   * Limpia el estado de error (quita rojo) y marca el campo como válido (azul).
+   * @param {HTMLInputElement|HTMLTextAreaElement} input
+   * @param {string} errorId
+   */
+  function clearError(input, errorId) {
+    input.removeAttribute('aria-invalid');
+    input.setAttribute('data-valid', 'true');
+
+    const control = input.closest('.control') || input.parentElement;
+    const p = control.querySelector('#' + errorId);
+    if (p) p.remove();
+
+    // Sanea aria-describedby si ya no quedan mensajes asociados
+    const rest = (input.getAttribute('aria-describedby') || '')
+      .split(' ')
+      .filter(id => id && id !== errorId);
+    if (rest.length) input.setAttribute('aria-describedby', rest.join(' '));
+    else input.removeAttribute('aria-describedby');
+  }
+
+  // ===================================
+  // CAMPO 1: NOMBRE (mínimo 3 chars)
+  // ===================================
+
+  const nameInput = document.getElementById('nombre'); // <input id="nombre" ...>
+  const NAME_ERROR_ID = 'error-name';// id único para el <p> del error
+
+  /** Regla sencilla: al menos 3 caracteres (ignora espacios alrededor). */
+  function validateName() {
+    const value = (nameInput?.value || '').trim(); // Evita error si no existe
+    if (value.length < 3) {
+      showError(nameInput, NAME_ERROR_ID, 'El nombre debe tener al menos 3 caracteres.'); // Mensaje visible
+      return false;
+    }
+    clearError(nameInput, NAME_ERROR_ID); // Limpia el error si es válido
+    return true;
+  }
+
+  /** Escuchas para el campo Nombre */
+  function wireNameValidation() {
+    if (!nameInput) return;
+
+    // Validar al salir del campo
+    nameInput.addEventListener('blur', validateName); // 'blur' = pierde foco
+
+    // Mientras escribe: si ya cumple, limpiar el error para feedback inmediato
+    nameInput.addEventListener('input', () => {
+      if (nameInput.value.trim().length >= 3) {
+        clearError(nameInput, NAME_ERROR_ID);
+      }
+    });
+
+    // (Opcional) Evitar envío si el nombre está mal:
+    const form = document.getElementById('form-inscripcion'); // <form id="form-inscripcion" ...>
+    form?.addEventListener('submit', (e) => { if (!validateName()) e.preventDefault(); }); // ' ' del form
+  }
+
+  wireNameValidation(); // linea única para activar la validación del nombre
+
+  // ==========================================================
+  // EJEMPLO (OPCIONAL) CAMPO 2: APELLIDOS (mínimo 3 chars)
+  // - Deja este bloque como plantilla para cuando quieras
+  //   incorporar la validación del segundo campo.
+  // ==========================================================
+
+  // const lastNameInput = document.getElementById('apellidos');
+  // const LASTNAME_ERROR_ID = 'error-lastname';
+  //
+  // function validateLastName() {
+  //   const value = (lastNameInput?.value || '').trim();
+  //   if (value.length < 3) {
+  //     showError(lastNameInput, LASTNAME_ERROR_ID, 'Los apellidos deben tener al menos 3 caracteres.');
+  //     return false;
+  //   }
+  //   clearError(lastNameInput, LASTNAME_ERROR_ID);
+  //   return true;
+  // }
+  //
+  // function wireLastNameValidation() {
+  //   if (!lastNameInput) return;
+  //   lastNameInput.addEventListener('blur', validateLastName);
+  //   lastNameInput.addEventListener('input', () => {
+  //     if ((lastNameInput.value || '').trim().length >= 3) {
+  //       clearError(lastNameInput, LASTNAME_ERROR_ID);
+  //     }
+  //   });
+  //   // const form = document.getElementById('form-inscripcion');
+  //   // form?.addEventListener('submit', (e) => { if (!validateLastName()) e.preventDefault(); });
+  // }
+  //
+  // wireLastNameValidation();
+
+  // ----------------------------------------------------------
+  // NOTAS PARA EXTENDER (MISMA RECETA PARA CADA CAMPO NUEVO):
+  // 1) Captura el input por su id (getElementById).
+  // 2) Define un ERROR_ID único.
+  // 3) Escribe validateX(): aplica tu regla y usa showError/clearError.
+  // 4) Escribe wireXValidation(): engancha blur + input.
+  // 5) (Opcional) Bloquea submit si falla: en el 'submit' del form.
+  // ----------------------------------------------------------
+});
+
+```
+
+js/main.js
+-----
+```javascript
+
+```
+
+assets/data/ciudades.json
+-----
+```json
+{
+  "ciudades": [
+    {
+      "nombre": "Madrid",
+      "comunidad_autonoma": "Comunidad de Madrid",
+      "poblacion": 3340000
+    },
+    {
+      "nombre": "Barcelona",
+      "comunidad_autonoma": "Cataluña",
+      "poblacion": 1650000
+    },
+    {
+      "nombre": "Valencia",
+      "comunidad_autonoma": "Comunidad Valenciana",
+      "poblacion": 800000
+    },
+    {
+      "nombre": "Sevilla",
+      "comunidad_autonoma": "Andalucía",
+      "poblacion": 680000
+    },
+    {
+      "nombre": "Zaragoza",
+      "comunidad_autonoma": "Aragón",
+      "poblacion": 675000
+    },
+    {
+      "nombre": "Málaga",
+      "comunidad_autonoma": "Andalucía",
+      "poblacion": 580000
+    },
+    {
+      "nombre": "Murcia",
+      "comunidad_autonoma": "Región de Murcia",
+      "poblacion": 460000
+    },
+    {
+      "nombre": "Palma",
+      "comunidad_autonoma": "Islas Baleares",
+      "poblacion": 420000
+    },
+    {
+      "nombre": "Las Palmas de Gran Canaria",
+      "comunidad_autonoma": "Canarias",
+      "poblacion": 380000
+    },
+    {
+      "nombre": "Bilbao",
+      "comunidad_autonoma": "País Vasco",
+      "poblacion": 345000
+    },
+    {
+      "nombre": "Alicante",
+      "comunidad_autonoma": "Comunidad Valenciana",
+      "poblacion": 340000
+    },
+    {
+      "nombre": "Córdoba",
+      "comunidad_autonoma": "Andalucía",
+      "poblacion": 320000
+    },
+    {
+      "nombre": "Valladolid",
+      "comunidad_autonoma": "Castilla y León",
+      "poblacion": 300000
+    },
+    {
+      "nombre": "Vigo",
+      "comunidad_autonoma": "Galicia",
+      "poblacion": 295000
+    },
+    {
+      "nombre": "Gijón",
+      "comunidad_autonoma": "Asturias",
+      "poblacion": 270000
+    }
+  ]
+}
+
+```
+
+assets/data/sample.json
+-----
+```json
+
+```
+
+docs/guia.md
+-----
+```markdown
+
+```
+
+components/footer.html
+-----
+```html
+
+```
+
+components/header.html
+-----
+```html
+
+```
+
+index.html
+-----
+```html
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inscripción Gimnasio — Formulario HTML + CSS</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <meta name="description" content="Formulario accesible y responsivo de inscripción a gimnasio hecho con HTML y CSS puros, listo para agregar validación en JavaScript." />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <div class="logo" aria-hidden="true"></div>
+          <div>
+            <h1>Inscripción al Gimnasio</h1>
+            <p class="sub">HTML + CSS puros · listo para añadir validación con JavaScript</p>
+          </div>
+        </div>
+        <p class="note">Consejo docente: este formulario usa validación nativa (atributos <code>required</code>, <code>pattern</code>, <code>min</code>, <code>max</code>, etc.). Tus alumnos podrán reforzarla con escuchas <code>input</code>, <code>blur</code> y <code>submit</code> para mensajes personalizados.</p>
+      </header>
+
+      <form id="form-inscripcion" action="#" method="post" novalidate>
+        <!-- DATOS PERSONALES -->
+        <fieldset>
+          <legend>1) Datos personales</legend>
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="nombre">Nombre <span class="req" aria-hidden="true">*</span></label>
+              <input id="nombre" name="nombre" type="text" autocomplete="given-name" placeholder="Juan" required minlength="3" maxlength="40" />
+            </div>
+            <div class="control">
+              <label for="apellidos">Apellidos <span class="req" aria-hidden="true">*</span></label>
+              <input id="apellidos" name="apellidos" type="text" autocomplete="family-name" placeholder="Pérez Gómez" required minlength="3" maxlength="80" />
+            </div>
+            <div class="control">
+              <label for="dni">Documento (DNI/NIE/Pasaporte) <span class="req" aria-hidden="true">*</span></label>
+              <input id="dni" name="dni" type="text" placeholder="12345678Z" required pattern="^[A-Za-z0-9]{5,15}$" title="Entre 5 y 15 caracteres alfanuméricos" />
+              <div class="hint">Solo letras y números (5–15).</div>
+            </div>
+          </div>
+
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="fecha-nac">Fecha de nacimiento <span class="req" aria-hidden="true">*</span></label>
+              <input id="fecha-nac" name="fecha_nacimiento" type="date" required />
+            </div>
+            <div class="control">
+              <label for="sexo">Sexo</label>
+              <select id="sexo" name="sexo">
+                <option value="" selected>— Selecciona —</option>
+                <option value="f">Femenino</option>
+                <option value="m">Masculino</option>
+                <option value="x">Prefiero no decirlo</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="estado-civil">Estado civil</label>
+              <select id="estado-civil" name="estado_civil">
+                <option value="" selected>— Selecciona —</option>
+                <option>Soltero/a</option>
+                <option>Casado/a</option>
+                <option>Pareja de hecho</option>
+                <option>Divorciado/a</option>
+                <option>Viudo/a</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- CONTACTO Y DIRECCIÓN -->
+        <fieldset>
+          <legend>2) Contacto y dirección</legend>
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="email">Correo electrónico <span class="req" aria-hidden="true">*</span></label>
+              <input id="email" name="email" type="email" autocomplete="email" placeholder="nombre@correo.com" required />
+            </div>
+            <div class="control">
+              <label for="telefono">Teléfono móvil <span class="req" aria-hidden="true">*</span></label>
+              <input id="telefono" name="telefono" type="tel" autocomplete="tel" placeholder="600123123" required pattern="^[0-9\s+()-]{9,20}$" title="Solo números y + (9–20 caracteres)" />
+            </div>
+            <div class="control">
+              <label for="contacto_pref">Preferencia de contacto</label>
+              <div class="chips">
+                <label class="chip"><input type="radio" name="contacto_pref" value="email" checked> Email</label>
+                <label class="chip"><input type="radio" name="contacto_pref" value="tel"> Teléfono</label>
+                <label class="chip"><input type="radio" name="contacto_pref" value="whatsapp"> WhatsApp</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="direccion">Dirección <span class="req" aria-hidden="true">*</span></label>
+              <input id="direccion" name="direccion" type="text" autocomplete="address-line1" placeholder="Calle y número" required maxlength="120" />
+            </div>
+            <div class="control">
+              <label for="ciudad">Ciudad <span class="req" aria-hidden="true">*</span></label>
+              <input id="ciudad" name="ciudad" type="text" autocomplete="address-level2" placeholder="Madrid" required />
+            </div>
+            <div class="control">
+              <label for="cp">Código postal <span class="req" aria-hidden="true">*</span></label>
+              <input id="cp" name="cp" type="text" inputmode="numeric" pattern="^[0-9]{5}$" placeholder="28001" required title="5 dígitos" />
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- DATOS MÉDICOS Y OBJETIVOS -->
+        <fieldset>
+          <legend>3) Salud y objetivos</legend>
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="altura">Altura (cm) <span class="req" aria-hidden="true">*</span></label>
+              <input id="altura" name="altura" type="number" min="120" max="230" step="1" placeholder="175" required />
+            </div>
+            <div class="control">
+              <label for="peso">Peso (kg) <span class="req" aria-hidden="true">*</span></label>
+              <input id="peso" name="peso" type="number" min="35" max="250" step="0.1" placeholder="72.5" required />
+            </div>
+            <div class="control">
+              <label for="nivel">Nivel de actividad actual</label>
+              <select id="nivel" name="nivel">
+                <option value="" selected>— Selecciona —</option>
+                <option>Sedentario</option>
+                <option>Ligero (1–2 días/sem)</option>
+                <option>Moderado (3–4 días/sem)</option>
+                <option>Intenso (5–6 días/sem)</option>
+                <option>Atleta</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="control">
+              <label for="objetivos">Objetivos principales</label>
+              <textarea id="objetivos" name="objetivos" placeholder="Pérdida de peso, ganar masa muscular, rehabilitación..." maxlength="500"></textarea>
+              <div class="hint">Máximo 500 caracteres.</div>
+            </div>
+            <div class="control">
+              <label>Condiciones médicas conocidas</label>
+              <div class="chips" role="group" aria-label="Condiciones médicas">
+                <label class="chip"><input type="checkbox" name="condiciones[]" value="cardiaco"> Cardíacas</label>
+                <label class="chip"><input type="checkbox" name="condiciones[]" value="respiratorio"> Respiratorias</label>
+                <label class="chip"><input type="checkbox" name="condiciones[]" value="metabolico"> Metabólicas</label>
+                <label class="chip"><input type="checkbox" name="condiciones[]" value="lesion"> Lesiones recientes</label>
+                <label class="chip"><input type="checkbox" name="condiciones[]" value="ninguna"> Ninguna</label>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- PLAN Y HORARIOS -->
+        <fieldset>
+          <legend>4) Plan y horarios</legend>
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="plan">Plan de membresía <span class="req" aria-hidden="true">*</span></label>
+              <select id="plan" name="plan" required>
+                <option value="" selected>— Selecciona —</option>
+                <option value="mensual">Mensual</option>
+                <option value="trimestral">Trimestral (−5%)</option>
+                <option value="anual">Anual (−12%)</option>
+                <option value="premium">Premium + Clases</option>
+              </select>
+            </div>
+            <div class="control plan-card">
+              <h4>Resumen de precios (orientativo)</h4>
+              <div class="grid cols-2">
+                <div><strong>Básico</strong><br><span class="price">29€</span>/mes</div>
+                <div><strong>Premium</strong><br><span class="price">49€</span>/mes</div>
+              </div>
+              <p class="hint">Perfecto para ejercicios de JavaScript que calculen cuotas según plan y duración.</p>
+            </div>
+            <div class="control">
+              <label>Días preferidos</label>
+              <div class="chips">
+                <label class="chip"><input type="checkbox" name="dias[]" value="lu"> Lu</label>
+                <label class="chip"><input type="checkbox" name="dias[]" value="ma"> Ma</label>
+                <label class="chip"><input type="checkbox" name="dias[]" value="mi"> Mi</label>
+                <label class="chip"><input type="checkbox" name="dias[]" value="ju"> Ju</label>
+                <label class="chip"><input type="checkbox" name="dias[]" value="vi"> Vi</label>
+                <label class="chip"><input type="checkbox" name="dias[]" value="sa"> Sá</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="hora">Franja horaria preferida</label>
+              <select id="hora" name="hora">
+                <option>6:00–9:00</option>
+                <option>9:00–12:00</option>
+                <option>12:00–16:00</option>
+                <option>16:00–19:00</option>
+                <option>19:00–22:00</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="clases">Clases grupales</label>
+              <select id="clases" name="clases" multiple size="4" aria-describedby="clases-help">
+                <option>Spinning</option>
+                <option>CrossFit</option>
+                <option>Yoga</option>
+                <option>Pilates</option>
+                <option>Boxeo</option>
+              </select>
+              <div id="clases-help" class="hint">Mantén Ctrl/⌘ para seleccionar varias.</div>
+            </div>
+            <div class="control">
+              <label for="referido">¿Quién te refirió?</label>
+              <input id="referido" name="referido" type="text" placeholder="Nombre de amigo o código" maxlength="30" />
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- FACTURACIÓN (datos no sensibles) -->
+        <fieldset>
+          <legend>5) Facturación</legend>
+          <div class="grid cols-3">
+            <div class="control">
+              <label for="nif-fac">NIF/NIE para factura</label>
+              <input id="nif-fac" name="nif_factura" type="text" pattern="^[A-Za-z0-9]{8,15}$" placeholder="A1234567Z" title="Entre 8 y 15 caracteres alfanuméricos" />
+            </div>
+            <div class="control">
+              <label for="dir-fac">Dirección de facturación</label>
+              <input id="dir-fac" name="dir_factura" type="text" placeholder="(si diferente a la postal)" maxlength="120" />
+            </div>
+            <div class="control">
+              <label for="iban">IBAN (4 últimos) <span class="req" aria-hidden="true">*</span></label>
+              <input id="iban" name="iban_ultimos" type="text" inputmode="numeric" pattern="^[0-9]{4}$" placeholder="1234" required title="Solo 4 dígitos" />
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- CONSENTIMIENTOS -->
+        <fieldset>
+          <legend>6) Consentimientos</legend>
+          <div class="grid">
+            <label class="inline"><input type="checkbox" name="tos" required> Acepto los <a href="#" target="_blank" rel="noopener">términos y condiciones</a> <span class="req" aria-hidden="true">*</span></label>
+            <label class="inline"><input type="checkbox" name="rgpd" required> Autorizo el tratamiento de mis datos conforme a la <a href="#" target="_blank" rel="noopener">política de privacidad</a> <span class="req" aria-hidden="true">*</span></label>
+            <label class="inline"><input type="checkbox" name="promo"> Deseo recibir comunicaciones promocionales</label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="reset" class="btn-secondary">Limpiar</button>
+          <button type="submit" class="btn-primary">Enviar solicitud</button>
+        </div>
+
+        <p class="foot">Los campos marcados con <span class="req">*</span> son obligatorios. Este formulario no guarda datos: úsalo con un endpoint ficticio para prácticas de JS (eventos <code>submit</code>, validaciones personalizadas, manejo del DOM).</p>
+      </form>
+    </div>
+    <script src="/js/formValidation.js" defer></script>
+  </body>
+</html>
+
+```
+
+pages/about.html
+-----
+```html
+
+```
+
+css/styles.css
+-----
+```css
+/* ============================= */
+/* Reset básico de estilos       */
+/* ============================= */
+* {
+  margin: 0;              /* Elimina los márgenes por defecto de todos los elementos */
+  padding: 0;             /* Elimina los rellenos (espaciado interno) por defecto */
+  box-sizing: border-box; /* Hace que el ancho/alto incluyan el padding y el borde */
+}
+/* ============================= */
+/* Estilos generales del body    */
+/* ============================= */
+body {
+  font-family: Arial, sans-serif; /* Define la tipografía principal de la página */
+  line-height: 1.6;               /* Espaciado entre líneas para mejorar la legibilidad */
+  background-color: #f4f4f4;      /* Color de fondo gris claro */
+  color: #333;                    /* Color del texto en gris oscuro */
+  padding: 10px;                  /* Espacio interior alrededor de todo el contenido */
+}
+
+
+/* ============================= */
+/* Encabezado principal (header) */
+/* ============================= */
+header {
+  background: #333;   /* Fondo gris oscuro */
+  color: #fff;        /* Texto en color blanco */
+  padding: 1rem 0;    /* Espaciado vertical superior e inferior */
+}
+
+/* Estilos de la barra de navegación dentro del header */
+header  {
+  display: flex;                  /* Utiliza flexbox para organizar los elementos */
+  justify-content: space-between; /* Distribuye los elementos: uno a la izquierda y otro a la derecha */
+  align-items: center;            /* Centra verticalmente los elementos */
+  max-width: 1100px;              /* Limita el ancho máximo del contenedor */
+  margin: auto;                   /* Centra el contenedor horizontalmente */
+  padding: 0 20px;                /* Añade espacio lateral interno */
+}
+
+/* Lista de enlaces de navegación */
+header nav ul {
+  list-style: none; /* Elimina los puntos o viñetas de la lista */
+  display: flex;    /* Coloca los elementos de la lista en línea (horizontal) */
+  gap: 1rem;        /* Espaciado uniforme entre cada enlace */
+}
+
+/* Estilos para los enlaces dentro del nav */
+header nav a {
+  color: #fff;            /* Texto de los enlaces en blanco */
+  text-decoration: none;  /* Elimina el subrayado por defecto */
+}
+
+/* ============================= */
+/* Título principal              */
+/* ============================= */
+.titulo-principal {
+  text-align: center;   /* Centra el texto horizontalmente */
+  margin-top: 20px;     /* Añade espacio superior */
+  font-size: 2.2em;     /* Aumenta el tamaño de fuente (2.2 veces el tamaño base) */
+  color: #333;          /* Color del texto en gris oscuro */
+}
+
+/* ============================= */
+/* Contenido principal (main)    */
+/* ============================= */
+main {
+  max-width: 1100px;   /* Define un ancho máximo para no ocupar toda la pantalla */
+  margin: 20px auto;   /* Margen superior e inferior de 20px y centrado horizontal */
+  background: #fff;    /* Fondo blanco */
+  padding: 20px;       /* Espaciado interno de 20px en todo el contenido */
+  border-radius: 8px;  /* Bordes redondeados para un efecto más moderno */
+}
+/* ============================= */
+/* Estilos para botones          */
+/* ============================= */
+button {
+  padding: 10px 15px;   /* Espaciado interno: 10px arriba/abajo y 15px a los lados */
+  border: none;         /* Elimina los bordes por defecto */
+  background: #0077cc;  /* Fondo azul */
+  color: white;         /* Texto blanco */
+  cursor: pointer;      /* Cambia el cursor a "mano" al pasar sobre el botón */
+  border-radius: 5px;   /* Bordes redondeados del botón */
+}
+/* Estilo del botón al pasar el ratón por encima */
+button:hover {
+  background: #005fa3; /* Cambia el color de fondo a un azul más oscuro */
+}
+footer {
+  text-align: center;   /* Centra el texto dentro del pie */
+  margin-top: 20px;     /* Separa el pie del contenido anterior */
+  padding: 10px;        /* Espaciado interno de 10px */
+  background: #333;     /* Fondo gris oscuro */
+  color: #fff;          /* Texto blanco */
+  border-radius: 8px;   /* Bordes redondeados */
+}
+      :root{
+        --bg: #0e0f13;
+        --panel: #151821;
+        --panel-2: #1a1f2b;
+        --text: #e6e8ef;
+        --muted: #b3b9c6;
+        --accent: #5b8def;
+        --danger: #ef5b5b;
+        --ok: #4caf50;
+        --radius: 16px;
+        --gap: 14px;
+        --shadow: 0 10px 30px rgba(0,0,0,.35);
+      }
+      *{box-sizing: border-box}
+      html,body{height:100%}
+      body{
+        margin:0; font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+        background: radial-gradient(1000px 600px at 80% -10%, #1b2333 0%, #0e0f13 60%);
+        color: var(--text);
+      }
+      .wrap{
+        max-width: 1100px; margin: 40px auto; padding: 0 16px;
+      }
+      header{
+        display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 22px;
+      }
+      .brand{ display:flex; align-items:center; gap:10px }
+      .logo{ width:40px; height:40px; border-radius:12px; background: linear-gradient(135deg, var(--accent), #9aaeff); box-shadow: var(--shadow); }
+      h1{ font-size: clamp(1.4rem, 2vw + .6rem, 2rem); margin:0 }
+      .sub{ color: var(--muted); margin: 2px 0 0; font-size:.95rem }
+
+      form{
+        background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 22px;
+        border: 1px solid rgba(255,255,255,.06);
+      }
+
+      fieldset{ border: 1px solid rgba(255,255,255,.12); padding: 18px; border-radius: 14px; margin: 0 0 18px }
+      legend{ padding: 0 8px; color: var(--muted); font-weight: 600; letter-spacing:.2px }
+
+      .grid{ display:grid; gap: var(--gap) }
+      /* 2 columnas desde 720px */
+      @media (min-width: 720px){
+        .grid.cols-2{ grid-template-columns: repeat(2, minmax(0,1fr)) }
+      }
+      @media (min-width: 980px){
+        .grid.cols-3{ grid-template-columns: repeat(3, minmax(0,1fr)) }
+      }
+
+      label{ display:block; font-weight:600; font-size:.92rem; color: var(--muted); margin: 2px 0 6px }
+      .control{ position: relative }
+      input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="number"], input[type="password"],
+      select, textarea{
+        width: 100%;
+        background: #0f1320;
+        border: 1px solid rgba(255,255,255,.12);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 12px 14px;
+        outline: none;
+        transition: border-color .2s, box-shadow .2s, background .2s;
+      }
+      textarea{ min-height: 96px; resize: vertical }
+      input::placeholder, textarea::placeholder{ color: #8390a6 }
+      input:focus, select:focus, textarea:focus{
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px rgba(91,141,239,.18);
+        background: #0c111c;
+      }
+      /* Validación nativa */
+      input:required:invalid, select:required:invalid, textarea:required:invalid{ border-color: rgba(239,91,91,.6) }
+      input:required:valid, select:required:valid, textarea:required:valid{ border-color: rgba(76,175,80,.6) }
+
+      .hint{ font-size:.85rem; color:#93a0b7; margin-top:6px }
+      .inline{ display:flex; align-items:center; gap:10px; flex-wrap: wrap }
+      .inline > label{ margin:0; font-weight:500 }
+      .chips{ display:flex; gap:8px; flex-wrap:wrap }
+      .chip{ display:inline-flex; align-items:center; gap:8px; background: #0f1320; border:1px solid rgba(255,255,255,.12); padding:10px 12px; border-radius: 999px }
+      .chip input{ margin:0 }
+
+      .actions{ display:flex; gap: 12px; justify-content:flex-end; margin-top: 6px; flex-wrap: wrap }
+      button{
+        appearance: none; border:0; padding: 12px 18px; border-radius: 12px; cursor:pointer; font-weight:700; letter-spacing:.2px
+      }
+      .btn-primary{ background: var(--accent); color: #0b0e16; box-shadow: var(--shadow) }
+      .btn-secondary{ background: transparent; color: var(--text); border:1px solid rgba(255,255,255,.22) }
+      .req{ color: #ef9a9a; font-weight:700 }
+
+      .note{
+        background: #0c111c; border: 1px dashed rgba(255,255,255,.18); padding: 12px 14px; border-radius: 12px; color: #aeb7c7; font-size:.92rem
+      }
+      .foot{ color: var(--muted); font-size:.85rem; margin-top: 10px }
+
+      /* Accesibilidad visual */
+      .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0 }
+
+      /* Tabla de precios simple */
+      .plan-card{
+        background: #0f1320; border:1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 12px 14px
+      }
+      .plan-card h4{ margin:.2rem 0 .6rem; font-size:1rem }
+      .price{ font-weight:800 }
+
+/* empiezan los estilos de validación de formularios */
+/* --- Estados básicos controlados por JS para el campo Nombre --- */
+input[aria-invalid="true"] {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 4px rgba(239, 91, 91, .18);
+  background: #0c111c;
+}
+
+input[data-valid="true"] {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 4px rgba(91, 141, 239, .18);
+  background: #0c111c;
+}
+
+/* Mensaje de error sencillo */
+.error-msg {
+  margin-top: 6px;
+  padding: 8px 10px;
+  font-size: .9rem;
+  color: #ffd3d3;
+  background: rgba(239,91,91,.12);
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+}
+
+
+```
+
+.gitignore
+-----
+```
+
+```
+
+docs/validacion_formularios_basico.drawio
+-----
+```
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.2.5 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36" version="28.2.5">
+  <diagram name="Página-1" id="a38g6VnNMbzJMIFapXRW">
+    <mxGraphModel dx="1426" dy="875" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="PoRm9y-I46UffXgv2mLI-1" value="Usuario" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="150" height="526" as="geometry" />
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-2" value="Formulario (HTML)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="220" y="20" width="154" height="526" as="geometry" />
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-3" value="Validación nativa (HTML5)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="454" y="20" width="206" height="526" as="geometry" />
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-4" value="Validación JS (formValidation.js)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="710" y="20" width="250" height="526" as="geometry" />
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-5" value="Rellena campos" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-1" target="PoRm9y-I46UffXgv2mLI-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="205" y="123" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-6" value="1" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-5">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-108.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-7" value="required/pattern/min/max" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-2" target="PoRm9y-I46UffXgv2mLI-3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="436" y="171" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-8" value="2" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-7">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-137.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-9" value="Marca válido/ inválido" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-3" target="PoRm9y-I46UffXgv2mLI-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="439" y="219" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-10" value="3" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-9">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="123.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-11" value="Enviar (submit)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-1" target="PoRm9y-I46UffXgv2mLI-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="205" y="267" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-12" value="4" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-11">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-108.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-13" value="Intercepta submit" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-2" target="PoRm9y-I46UffXgv2mLI-4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="575" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-14" value="5" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-13">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-276.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-15" value="Reglas extra (blur/input)" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-4" target="PoRm9y-I46UffXgv2mLI-4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="886" y="363" />
+              <mxPoint x="886" y="393" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-16" value="6" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-15">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-57" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-17" value="Mensajes accesibles y estilos" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="PoRm9y-I46UffXgv2mLI-4" target="PoRm9y-I46UffXgv2mLI-1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="477" y="441" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PoRm9y-I46UffXgv2mLI-18" value="7" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="PoRm9y-I46UffXgv2mLI-17">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="363.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+
+```
+
+docs/validacion_formularios_detallado.drawio
+-----
+```
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.2.5 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36" version="28.2.5">
+  <diagram name="Página-1" id="LjQrygX40vMBq3zMNskr">
+    <mxGraphModel dx="1426" dy="875" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="eugp80K0Mev3atkca4o--1" value="Usuario" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="150" height="784" as="geometry" />
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--2" value="index.html" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="220" y="20" width="150" height="784" as="geometry" />
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--3" value="styles.css (estados)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="473" y="20" width="156" height="784" as="geometry" />
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--4" value="formValidation.js" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="679" y="20" width="150" height="784" as="geometry" />
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--5" value="main.js" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="879" y="20" width="150" height="784" as="geometry" />
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--6" value="ciudades.json" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="1087" y="20" width="150" height="784" as="geometry" />
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--7" value="Carga página" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--1" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="204" y="123" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--8" value="1" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--7">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-107.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--9" value="Pinta estilos base/estados" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--2" target="eugp80K0Mev3atkca4o--3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="432" y="171" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--10" value="2" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--9">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-135.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--11" value="wireNameValidation()" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--2" target="eugp80K0Mev3atkca4o--4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="533" y="219" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--12" value="3" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--11">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-237" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--13" value="init includes + lógica" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--2" target="eugp80K0Mev3atkca4o--5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="633" y="267" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--14" value="4" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--13">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-337" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--15" value="fetch ciudades.json" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--5" target="eugp80K0Mev3atkca4o--6">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1067" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--16" value="5" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--15">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-111.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--17" value="lista de ciudades" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--6" target="eugp80K0Mev3atkca4o--5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="363" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--18" value="6" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--17">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="97.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--19" value="Escribe &quot;Ma...&quot;" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--1" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="204" y="411" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--20" value="7" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--19">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-107.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--21" value="Autocompleta/valida ciudad" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--5" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="636" y="459" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--22" value="8" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--21">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="323" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--23" value="Blur en Nombre" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--1" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="204" y="507" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--24" value="9" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--23">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-107.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--25" value="showError/clearError (role=&quot;alert&quot;)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--4" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="536" y="555" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--26" value="10" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--25">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="223" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--27" value="Submit" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--1" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="204" y="603" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--28" value="11" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--27">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="-107.5" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--29" value="Si hay errores, e.preventDefault()" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--4" target="eugp80K0Mev3atkca4o--2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="536" y="651" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--30" value="12" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--29">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="223" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--31" value="Feedback accesible + focus en el primer error" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="eugp80K0Mev3atkca4o--4" target="eugp80K0Mev3atkca4o--1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="436" y="699" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eugp80K0Mev3atkca4o--32" value="13" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" vertex="1" parent="eugp80K0Mev3atkca4o--31">
+          <mxGeometry width="14" height="14" relative="1" as="geometry">
+            <mxPoint x="323" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+
+```
+
+repositorio.txt
+-----
+```
+# Recolector de fuentes
+
 - Fecha de generación: 2025-11-05 17:13:58
 - Raíz: `/home/sulbaranjc/proyectos/ValidacionDeFormularios`
 - Archivo de salida: `repositorio.txt` (chunk 1/1)
@@ -810,6 +1972,9 @@ input[data-valid="true"] {
 .gitignore
 -----
 ```
+
+```
+
 
 ```
 
