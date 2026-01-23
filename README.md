@@ -36,7 +36,9 @@ ValidacionDeFormularios/
 ├── 📁 css/
 │   └── styles.css                # Estilos principales (dark theme)
 ├── 📁 docs/
-│   └── guia.md                   # Documentación técnica
+│   ├── guia.md                   # Documentación técnica
+│   ├── guia-despliegue-automatizado.md  # Guía del script (Linux)
+│   └── guia-windows.md           # 🪟 Guía del script (Windows)
 ├── 📁 js/
 │   ├── formValidation.js         # Controlador principal de validación
 │   ├── main.js                   # Archivo principal de la aplicación
@@ -47,7 +49,8 @@ ValidacionDeFormularios/
 │       └── rules.js              # Reglas de validación custom
 ├── 📁 pages/
 │   └── about.html                # Página "Acerca de"
-├── deploy-automation.sh          # 🤖 Script de despliegue automatizado
+├── deploy-automation.sh          # 🤖 Script despliegue (Linux/macOS)
+├── deploy-automation.bat         # 🪟 Script despliegue (Windows)
 ├── docker-compose.yml            # 🐳 Configuración Docker Compose
 ├── Dockerfile                    # 🐳 Imagen Docker con Nginx
 ├── index.html                    # Página principal con formulario
@@ -838,21 +841,26 @@ deploy (producción)
 
 ### 🤖 Script de Automatización de Despliegue
 
-Para facilitar el proceso de despliegue, el proyecto incluye un **script de automatización** que ejecuta todos los pasos necesarios de forma automática.
+Para facilitar el proceso de despliegue, el proyecto incluye **scripts de automatización** para Linux y Windows que ejecutan todos los pasos necesarios de forma automática.
 
-#### Archivo: `deploy-automation.sh`
+#### 📂 Versiones Disponibles
+
+| Sistema Operativo | Archivo | Ejecución |
+|-------------------|---------|-----------|
+| **Linux / macOS** | `deploy-automation.sh` | `./deploy-automation.sh` |
+| **Windows** | `deploy-automation.bat` | `deploy-automation.bat` o doble clic |
 
 **Ubicación:** Raíz del proyecto
 
-**¿Qué hace el script?**
-1. ✅ Detecta la rama actual (o recibe una como parámetro)
-2. ✅ Hace commit de todos los cambios pendientes
+**¿Qué hacen los scripts?**
+1. ✅ Detectan la rama actual (o reciben una como parámetro)
+2. ✅ Hacen commit de todos los cambios pendientes
 3. ✅ Push de la rama actual al remoto
-4. ✅ Cambia a la rama `deploy`
-5. ✅ Mergea los cambios de la rama origen a `deploy`
+4. ✅ Cambian a la rama `deploy`
+5. ✅ Mergean los cambios de la rama origen a `deploy`
 6. ✅ Push de la rama `deploy` (dispara GitHub Actions)
 
-#### Uso del Script
+#### Uso del Script - Linux/macOS
 
 **Opción 1: Detección automática de rama**
 ```bash
@@ -867,7 +875,7 @@ Para facilitar el proceso de despliegue, el proyecto incluye un **script de auto
 ./deploy-automation.sh feature/mejoras
 ```
 
-#### Proceso Paso a Paso
+**Proceso Paso a Paso**
 
 ```bash
 # 1. Dar permisos de ejecución (solo primera vez)
@@ -888,7 +896,37 @@ chmod +x deploy-automation.sh
 # ✅ Push de deploy (activa CI/CD)
 ```
 
-#### Características del Script
+#### Uso del Script - Windows
+
+**Opción 1: Doble clic**
+```
+Simplemente hacer doble clic en deploy-automation.bat
+```
+
+**Opción 2: Desde CMD**
+```cmd
+REM Detección automática de rama
+deploy-automation.bat
+
+REM Especificar rama manualmente
+deploy-automation.bat main
+deploy-automation.bat feature/mejoras
+```
+
+**Requisitos Windows:**
+```cmd
+REM 1. Instalar Git for Windows
+REM    https://git-scm.com/download/win
+
+REM 2. Configurar Git (solo primera vez)
+git config --global user.name "Tu Nombre"
+git config --global user.email "tu@email.com"
+
+REM 3. Ejecutar script (doble clic o desde CMD)
+deploy-automation.bat
+```
+
+#### Características de Ambos Scripts
 
 **✨ Validaciones de Seguridad:**
 - Verifica que estés en un repositorio Git
@@ -899,7 +937,7 @@ chmod +x deploy-automation.sh
 
 **🎨 Interfaz Amigable:**
 - Mensajes con colores (verde=éxito, rojo=error, azul=info)
-- Emojis para mejor visualización
+- Emojis para mejor visualización (⚠️ ✅ ❌ ℹ️)
 - Progreso paso a paso
 - Resumen final del despliegue
 
@@ -912,7 +950,13 @@ chmod +x deploy-automation.sh
 - Pregunta si quieres crear rama `deploy` si no existe
 - Opción de regresar a rama origen al finalizar
 
-#### Ejemplo de Salida
+**🪟 Específico Windows (.bat):**
+- ✅ Soporte colores ANSI (Windows 10/11)
+- ✅ Codificación UTF-8 para emojis
+- ✅ Doble clic para ejecutar
+- ✅ Pausa automática al finalizar
+
+#### Ejemplo de Salida (Linux)
 
 ```bash
 $ ./deploy-automation.sh
@@ -1057,23 +1101,48 @@ git push  # Pedirá usuario/contraseña o token
 | **Consistencia** | Variable | Siempre igual |
 | **Aprendizaje** | Requiere conocer Git | Plug & play |
 | **Rollback** | Manual | Detecta problemas temprano |
+| **Windows** | Requiere Git Bash | ✅ Script .bat nativo |
+
+#### Comparación: Linux vs Windows
+
+| Característica | Linux (.sh) | Windows (.bat) |
+|----------------|-------------|----------------|
+| **Ejecución** | `./deploy-automation.sh` | `deploy-automation.bat` o doble clic |
+| **Permisos** | Requiere `chmod +x` | No requiere permisos |
+| **Colores** | ✅ ANSI | ✅ ANSI (Win10/11) |
+| **Emojis** | ✅ | ✅ UTF-8 |
+| **Validaciones** | ✅ | ✅ |
+| **Auto-detección** | ✅ | ✅ |
+| **Interactividad** | ✅ | ✅ + PAUSE |
+| **Funcionalidad** | Idéntica | Idéntica |
+
+**📖 Guía completa para Windows:** [docs/guia-windows.md](docs/guia-windows.md)
 
 #### Código del Script (Resumen)
 
-El script está completamente documentado con:
+Los scripts están completamente documentados con:
 - **Colores** para mensajes (verde, rojo, amarillo, azul)
 - **Validaciones** en cada paso
 - **Manejo de errores** robusto
 - **Comentarios educativos** para estudiantes
-- **Funciones auxiliares** reutilizables
+- **Funciones/Etiquetas** reutilizables
 
-**Funciones principales:**
+**Funciones principales (Linux):**
 ```bash
 error()    # Imprime error en rojo y sale
 success()  # Imprime éxito en verde
 info()     # Imprime información en azul
 warning()  # Imprime advertencia en amarillo
 step()     # Imprime paso del proceso en cyan
+```
+
+**Variables principales (Windows):**
+```batch
+%COLOR_RED%     REM Color rojo para errores
+%COLOR_GREEN%   REM Color verde para éxitos
+%COLOR_BLUE%    REM Color azul para información
+%COLOR_YELLOW%  REM Color amarillo para advertencias
+%COLOR_CYAN%    REM Color cyan para pasos
 ```
 
 **Flujo de validación:**
