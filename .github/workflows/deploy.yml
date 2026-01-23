@@ -1,42 +1,212 @@
+# ====================================================================
+# GITHUB ACTIONS WORKFLOW - DESPLIEGUE CONTINUO (CD)
+# ====================================================================
+# Este workflow automatiza el despliegue de la aplicación en un
+# servidor remoto usando Docker cuando se hace push a la rama deploy.
+#
+# FUNDAMENTOS DE CI/CD:
+# - CI (Integración Continua): Automatiza testing y validación
+# - CD (Despliegue Continuo): Automatiza el despliegue a producción
+# - GitHub Actions: Plataforma de CI/CD integrada en GitHub
+# ====================================================================
+
+# NOMBRE DEL WORKFLOW
+# Aparece en la pestaña "Actions" de GitHub
 name: Deploy ValidacionDeFormularios
 
+# ====================================================================
+# TRIGGER (DISPARADOR): ¿Cuándo se ejecuta este workflow?
+# ====================================================================
 on:
+  # PUSH: Se ejecuta cuando se hace push al repositorio
   push:
+    # BRANCHES: Solo se ejecuta en la rama especificada
     branches:
-      - deploy
+      - deploy  # Rama de producción/despliegue
+    
+    # ESTRATEGIA DE RAMAS:
+    # - main: Desarrollo activo, testing
+    # - deploy: Código listo para producción
+    # Al hacer push a 'deploy', se dispara automáticamente el despliegue
 
+# ====================================================================
+# JOBS: Trabajos a ejecutar (pueden correr en paralelo o secuencialmente)
+# ====================================================================
 jobs:
+  # --------------------------------------------------------------------
+  # JOB: deploy
+  # Descripción: Conecta al servidor y actualiza la aplicación
+  # --------------------------------------------------------------------
   deploy:
+    # RUNNER: Máquina virtual donde se ejecuta el job
+    # ubuntu-latest: Última versión estable de Ubuntu en GitHub Actions
+    # Otras opciones: windows-latest, macos-latest
     runs-on: ubuntu-latest
 
+    # STEPS: Secuencia de tareas a ejecutar
     steps:
+      # ------------------------------------------------------------------
+      # STEP 1: Despliegue remoto vía SSH
+      # ------------------------------------------------------------------
       - name: Deploy real en servidor Docker
+        # USES: Acción de terceros del GitHub Marketplace
+        # appleboy/ssh-action: Permite ejecutar comandos SSH remotos
+        # @v1.0.3: Versión específica (buena práctica para estabilidad)
         uses: appleboy/ssh-action@v1.0.3
+        
+        # WITH: Parámetros de configuración de la acción
         with:
+          # ----------------------------------------------------------------
+          # CREDENCIALES SSH (almacenadas en GitHub Secrets)
+          # ----------------------------------------------------------------
+          # HOST: Dirección IP o dominio del servidor
+          # Configurar en: Settings → Secrets and variables → Actions
           host: ${{ secrets.SSH_HOST }}
+          
+          # USERNAME: Usuario SSH (típicamente 'ubuntu', 'root', 'admin')
           username: ${{ secrets.SSH_USER }}
+          
+          # KEY: Clave privada SSH en formato PEM
+          # Generada con: ssh-keygen -t rsa -b 4096
+          # La clave pública debe estar en el servidor (~/.ssh/authorized_keys)
           key: ${{ secrets.SSH_KEY }}
+          
+          # ----------------------------------------------------------------
+          # SCRIPT: Comandos a ejecutar en el servidor remoto
+          # ----------------------------------------------------------------
           script: |
+            # BASH STRICT MODE
+            # set -e: Detiene la ejecución si cualquier comando falla
+            # Garantiza que errores no pasen desapercibidos
             set -e
 
+            # --------------------------------------------------------------
+            # PASO 1: Navegar al directorio del proyecto
+            # --------------------------------------------------------------
             echo "📌 Entrando al proyecto"
+            # DEPLOY_PATH: Ruta completa del proyecto en el servidor
+            # Ejemplo: /home/ubuntu/proyectos/ValidacionDeFormularios
             cd ${{ secrets.DEPLOY_PATH }}
 
+            # --------------------------------------------------------------
+            # PASO 2: Limpieza del repositorio Git
+            # --------------------------------------------------------------
             echo "📌 Limpiando repo (evita bloqueos por archivos sueltos)"
+            # git reset --hard: Descarta cambios locales no commiteados
+            # Resetea el working directory al último commit
             git reset --hard
+            
+            # git clean -fd: Elimina archivos no trackeados
+            # -f: force (forzar)
+            # -d: directories (incluir directorios)
+            # Previene conflictos por archivos generados o modificados localmente
             git clean -fd
 
+            # --------------------------------------------------------------
+            # PASO 3: Sincronización con repositorio remoto
+            # --------------------------------------------------------------
             echo "📌 Sincronizando con origin/deploy"
+            # git fetch origin: Descarga cambios del remoto sin fusionar
+            # Actualiza referencias remotas (origin/deploy, origin/main, etc.)
             git fetch origin
+            
+            # git checkout -B deploy origin/deploy:
+            # -B: Crea o resetea la rama 'deploy' local
+            # origin/deploy: La pone al día con la rama remota
+            # Fuerza que la rama local sea idéntica a la remota
             git checkout -B deploy origin/deploy
+            
+            # git pull --ff-only origin deploy:
+            # Trae cambios de origin/deploy
+            # --ff-only: Solo permite fast-forward (no merge commits)
+            # Garantiza un historial lineal y limpio
             git pull --ff-only origin deploy
 
+            # --------------------------------------------------------------
+            # PASO 4: Verificación (debugging)
+            # --------------------------------------------------------------
             echo "📌 Rama activa:"
+            # Muestra la rama actual (debe ser 'deploy')
             git branch --show-current
 
             echo "📌 Commit desplegado:"
+            # Muestra el último commit en formato corto
+            # -1: Solo el último commit
+            # --oneline: Formato compacto (hash + mensaje)
             git log -1 --oneline
 
+            # --------------------------------------------------------------
+            # PASO 5: Despliegue con Docker
+            # --------------------------------------------------------------
             echo "🐳 Recreando contenedores Docker"
+            # docker compose down:
+            # - Detiene todos los contenedores del proyecto
+            # - Elimina los contenedores (pero NO las imágenes ni volúmenes)
+            # - Libera puertos y recursos
             docker compose down
+            
+            # docker compose up -d --build:
+            # up: Crea e inicia contenedores
+            # -d: Modo detached (en segundo plano)
+            # --build: Reconstruye las imágenes aunque existan
+            #          Garantiza que el código nuevo se incluya
+            # 
+            # PROCESO:
+            # 1. Lee docker-compose.yml
+            # 2. Construye imagen desde Dockerfile (COPY archivos nuevos)
+            # 3. Crea contenedor 'validacion-formularios'
+            # 4. Lo conecta a la red 'proxy'
+            # 5. El reverse proxy detecta el nuevo contenedor
+            # 6. La app queda disponible en validacion.docker.sulbaranjc.com
             docker compose up -d --build
+
+# ====================================================================
+# FLUJO COMPLETO DEL DESPLIEGUE:
+# ====================================================================
+# 1. DESARROLLADOR: Hace cambios en código localmente
+# 2. DESARROLLADOR: Commit y push a rama 'deploy'
+#    git push origin deploy
+# 3. GITHUB: Detecta push a rama 'deploy'
+# 4. GITHUB ACTIONS: Inicia workflow automáticamente
+# 5. RUNNER (Ubuntu): Se conecta al servidor vía SSH
+# 6. SERVIDOR: Actualiza código con git pull
+# 7. SERVIDOR: Reconstruye imagen Docker con código nuevo
+# 8. SERVIDOR: Reinicia contenedor con imagen actualizada
+# 9. REVERSE PROXY: Redirecciona tráfico al nuevo contenedor
+# 10. USUARIOS: Ven la versión actualizada instantáneamente
+#
+# TIEMPO TOTAL: ~30-60 segundos desde push hasta deploy
+# ====================================================================
+
+# ====================================================================
+# VENTAJAS DE ESTE ENFOQUE:
+# ====================================================================
+# ✅ Automatización total: Sin intervención manual
+# ✅ Rapidez: Deploy en segundos
+# ✅ Consistencia: Mismo proceso cada vez
+# ✅ Trazabilidad: Logs completos en GitHub Actions
+# ✅ Rollback fácil: Revertir commit y re-desplegar
+# ✅ Seguridad: Secrets protegidos, no expuestos en código
+# ✅ Escalabilidad: Fácil añadir más pasos (tests, notificaciones)
+# ====================================================================
+
+# ====================================================================
+# CONFIGURACIÓN INICIAL REQUERIDA:
+# ====================================================================
+# 1. En GitHub (Settings → Secrets):
+#    - SSH_HOST: IP o dominio del servidor
+#    - SSH_USER: Usuario SSH
+#    - SSH_KEY: Clave privada SSH
+#    - DEPLOY_PATH: Ruta del proyecto en servidor
+#
+# 2. En el servidor:
+#    - Clave pública SSH en ~/.ssh/authorized_keys
+#    - Docker y Docker Compose instalados
+#    - Red 'proxy' creada: docker network create proxy
+#    - Nginx-proxy corriendo (reverse proxy)
+#    - Repositorio clonado en DEPLOY_PATH
+#
+# 3. DNS configurado:
+#    - Dominio apuntando a IP del servidor
+#    - Ejemplo: validacion.docker.sulbaranjc.com → 192.168.1.100
+# ====================================================================

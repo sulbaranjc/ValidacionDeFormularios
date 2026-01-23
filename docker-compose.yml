@@ -1,13 +1,77 @@
+# ====================================================================
+# DOCKER COMPOSE - SISTEMA DE VALIDACIÓN DE FORMULARIOS
+# ====================================================================
+# Este archivo define la configuración para desplegar la aplicación
+# web en un contenedor Docker con conexión a un reverse proxy.
+#
+# FUNDAMENTOS:
+# - Docker Compose permite orquestar múltiples contenedores
+# - Facilita la configuración de servicios, redes y variables
+# - Automatiza el proceso de construcción y despliegue
+# ====================================================================
+
+# Versión implícita: Docker Compose V2 (no requiere especificar version)
+
 services:
+  # --------------------------------------------------------------------
+  # SERVICIO: validacion
+  # Descripción: Contenedor que aloja la aplicación web estática
+  # --------------------------------------------------------------------
   validacion:
+    # BUILD: Construye la imagen desde el Dockerfile en el directorio actual
+    # El punto (.) indica que el Dockerfile está en la raíz del proyecto
     build: .
+    
+    # CONTAINER_NAME: Nombre único del contenedor en el sistema Docker
+    # Facilita la identificación y gestión del contenedor
     container_name: validacion-formularios
+    
+    # ENVIRONMENT: Variables de entorno para el contenedor
+    # Estas variables son leídas por el reverse proxy (nginx-proxy)
     environment:
+      # VIRTUAL_HOST: Dominio por el cual se accederá a la aplicación
+      # El reverse proxy redirige las peticiones de este dominio al contenedor
+      # Formato: subdominio.dominio.tld
       - VIRTUAL_HOST=validacion.docker.sulbaranjc.com
+      
+      # VIRTUAL_PORT: Puerto interno del contenedor donde escucha la app
+      # Nginx por defecto sirve en el puerto 80 (HTTP estándar)
+      # El reverse proxy usa esta variable para saber a qué puerto conectarse
       - VIRTUAL_PORT=80
+    
+    # NETWORKS: Redes a las que se conecta el contenedor
+    # Permite la comunicación entre contenedores en la misma red
     networks:
+      # Red 'proxy': Conecta este contenedor con el reverse proxy
+      # Esto permite que el nginx-proxy descubra automáticamente este servicio
       - proxy
 
+# ====================================================================
+# NETWORKS: Definición de redes Docker
+# ====================================================================
 networks:
+  # Red 'proxy': Red compartida con el reverse proxy
   proxy:
+    # EXTERNAL: true indica que esta red ya existe y fue creada externamente
+    # No intenta crearla, solo se conecta a la red existente
+    # Esta red debe haber sido creada previamente con:
+    # docker network create proxy
     external: true
+
+# ====================================================================
+# FUNCIONAMIENTO DEL REVERSE PROXY:
+# ====================================================================
+# 1. El contenedor nginx-proxy escucha en los puertos 80/443 del host
+# 2. Cuando recibe una petición HTTP para validacion.docker.sulbaranjc.com:
+#    - Inspecciona la variable VIRTUAL_HOST de todos los contenedores
+#    - Encuentra este servicio con VIRTUAL_HOST coincidente
+#    - Reenvía la petición al puerto 80 de este contenedor
+# 3. Nginx (dentro del contenedor) sirve los archivos estáticos
+# 4. La respuesta regresa al usuario a través del reverse proxy
+#
+# VENTAJAS:
+# - Un solo servidor puede alojar múltiples aplicaciones
+# - Cada app tiene su propio dominio/subdominio
+# - Fácil gestión de certificados SSL (con nginx-proxy-companion)
+# - Aislamiento entre aplicaciones
+# ====================================================================
