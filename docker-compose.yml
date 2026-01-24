@@ -1,9 +1,6 @@
-version: "3.8"
-
 services:
   validacion-formularios:
     image: nginx:alpine
-    container_name: validacion-formularios
     restart: always
 
     volumes:
@@ -17,8 +14,12 @@ services:
       VIRTUAL_PORT: "80"
 
     networks:
+      - internal
       - nginx-proxy
 
 networks:
+  internal:
+    name: validacion_formularios_internal
+
   nginx-proxy:
     external: true
